@@ -1,0 +1,25 @@
+name: macOS build and tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native-build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: swift --version
+      - name: Core tests
+        run: swift test
+      - name: Build locally signed application
+        run: /bin/zsh scripts/build-app.sh
+      - name: Verify both bundle signatures
+        run: |
+          codesign --verify --deep --strict build/PaneGrid.app
+          plutil -lint Resources/Info.plist Resources/Fixture-Info.plist

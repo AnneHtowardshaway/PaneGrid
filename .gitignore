@@ -1,0 +1,25 @@
+.build/
+.swiftpm/
+build/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.env
+.env.*
+*.p12
+*.mobileprovision
+*.xcresult
+
+# Local app data and diagnostic output must never accompany public source.
+/configuration*.json
+/PaneGrid-*.json
+/PaneGrid-*.log
+/.playwright-mcp/
+*.app/
+*.dSYM/
+*.pfx
+*.key
+*.pem
+*.cer
+*.certSigningRequest
+*.provisionprofile

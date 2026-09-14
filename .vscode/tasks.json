@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "PaneGrid: Build app",
+			"type": "shell",
+			"command": "/bin/zsh",
+			"args": [
+				"scripts/build-app.sh"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
