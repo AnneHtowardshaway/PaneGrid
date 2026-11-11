@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var permissionTimer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var lastShortcut: PickerShortcut?
+    private var lastLanguage: AppLanguage?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -33,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let image = NSImage(systemSymbolName: "rectangle.split.3x3", accessibilityDescription: "PaneGrid")
         image?.isTemplate = true
         item.button?.image = image
-        item.button?.toolTip = "PaneGrid — window workspace"
+        item.button?.toolTip = Localization.t("PaneGrid — window workspace")
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
@@ -64,6 +65,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func preferencesChanged() {
         overlay?.preferencesChanged()
+        // 语言切换后 AppKit 侧的菜单与提示不会随 SwiftUI 重绘，需要显式重建。
+        if lastLanguage != state.settings.language {
+            lastLanguage = state.settings.language
+            installMainMenu()
+            statusItem?.button?.toolTip = Localization.t("PaneGrid — window workspace")
+            statusItem?.menu?.update()
+        }
         if lastShortcut != state.settings.shortcut {
             lastShortcut = state.settings.shortcut
             if let error = hotKey.configure(state.settings.shortcut) { state.notice = .init(text: error, isError: true) }
@@ -96,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !state.isBusy else {
-            state.notice = .init(text: "Wait for the current arrangement or rollback to finish before quitting.", isError: true)
+            state.notice = .init(key: "Wait for the current arrangement or rollback to finish before quitting.", isError: true)
             showWorkspace()
             return .terminateCancel
         }
@@ -107,16 +115,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        add("Open grid picker   \(state.settings.shortcut.label)", action: #selector(pickerAction), to: menu, enabled: state.isTrusted && !state.isPaused)
-        add("Workspace…", action: #selector(showWorkspace), to: menu)
-        add("Settings…", action: #selector(settingsAction), to: menu)
+        add(Localization.tf("Open grid picker   %@", state.settings.shortcut.label), action: #selector(pickerAction), to: menu, enabled: state.isTrusted && !state.isPaused)
+        add(Localization.t("Workspace…"), action: #selector(showWorkspace), to: menu)
+        add(Localization.t("Settings…"), action: #selector(settingsAction), to: menu)
         menu.addItem(.separator())
-        add("Undo last arrangement", action: #selector(undoAction), to: menu, enabled: state.undoDepth > 0 && !state.isBusy)
-        let pause = add("Pause window management", action: #selector(pauseAction), to: menu)
+        add(Localization.t("Undo last arrangement"), action: #selector(undoAction), to: menu, enabled: state.undoDepth > 0 && !state.isBusy)
+        let pause = add(Localization.t("Pause window management"), action: #selector(pauseAction), to: menu)
         pause.state = state.isPaused ? .on : .off
         if !state.layouts.isEmpty {
             menu.addItem(.separator())
-            let layouts = NSMenuItem(title: "Saved layouts", action: nil, keyEquivalent: "")
+            let layouts = NSMenuItem(title: Localization.t("Saved layouts"), action: nil, keyEquivalent: "")
             let submenu = NSMenu()
             for layout in state.layouts {
                 let item = add(layout.name, action: #selector(loadAction(_:)), to: submenu, enabled: !state.isBusy && !state.isScanning)
@@ -126,8 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             menu.addItem(layouts)
         }
         menu.addItem(.separator())
-        add("Open practice windows", action: #selector(practiceAction), to: menu)
-        add("Quit PaneGrid", action: #selector(quitAction), to: menu)
+        add(Localization.t("Open practice windows"), action: #selector(practiceAction), to: menu)
+        add(Localization.t("Quit PaneGrid"), action: #selector(quitAction), to: menu)
     }
 
     @discardableResult private func add(_ title: String, action: Selector, to menu: NSMenu, enabled: Bool = true) -> NSMenuItem {
@@ -155,17 +163,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let menu = NSMenu()
         let app = NSMenuItem()
         let appMenu = NSMenu()
-        add("PaneGrid Workspace", action: #selector(showWorkspace), to: appMenu)
-        let settings = add("Settings…", action: #selector(settingsAction), to: appMenu)
+        add(Localization.t("PaneGrid Workspace"), action: #selector(showWorkspace), to: appMenu)
+        let settings = add(Localization.t("Settings…"), action: #selector(settingsAction), to: appMenu)
         settings.keyEquivalent = ","
         appMenu.addItem(.separator())
-        let quit = add("Quit PaneGrid", action: #selector(quitAction), to: appMenu)
+        let quit = add(Localization.t("Quit PaneGrid"), action: #selector(quitAction), to: appMenu)
         quit.keyEquivalent = "q"
         app.submenu = appMenu
         menu.addItem(app)
-        let edit = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
-        let editMenu = NSMenu(title: "Edit")
-        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
+        let edit = NSMenuItem(title: Localization.t("Edit"), action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: Localization.t("Edit"))
+        for (title, action, key) in [(Localization.t("Undo"), "undo:", "z"), (Localization.t("Cut"), "cut:", "x"),
+                                     (Localization.t("Copy"), "copy:", "c"), (Localization.t("Paste"), "paste:", "v"),
+                                     (Localization.t("Select All"), "selectAll:", "a")] {
             editMenu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
         }
         edit.submenu = editMenu

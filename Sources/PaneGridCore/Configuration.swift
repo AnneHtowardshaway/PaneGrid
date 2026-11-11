@@ -7,7 +7,7 @@ public enum PickerShortcut: String, CaseIterable, Codable, Sendable {
         switch self {
         case .controlOptionSpace: return "⌃⌥ Space"
         case .controlShiftSpace: return "⌃⇧ Space"
-        case .disabled: return "Disabled"
+        case .disabled: return Localization.t("Disabled")
         }
     }
 }
@@ -26,11 +26,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var theme: AppTheme = .system
     public var shortcut: PickerShortcut = .controlOptionSpace
     public var excludedBundleIDs: [String] = []
+    public var language: AppLanguage = .system
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case grid, gap, margin, hoverEnabled, requireOption, hoverDelay, showPreview, reflowSelection
-        case tileAllAppWindows, autoFitAppWindows, theme, shortcut, excludedBundleIDs
+        case tileAllAppWindows, autoFitAppWindows, theme, shortcut, excludedBundleIDs, language
     }
 
     public init(from decoder: Decoder) throws {
@@ -49,6 +50,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         // Version 1 files predate these controls. Preserve every old field without discarding user layouts.
         tileAllAppWindows = try values.decodeIfPresent(Bool.self, forKey: .tileAllAppWindows) ?? false
         autoFitAppWindows = try values.decodeIfPresent(Bool.self, forKey: .autoFitAppWindows) ?? true
+        language = try values.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .system
     }
 
     public func validate() throws {

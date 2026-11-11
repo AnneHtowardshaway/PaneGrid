@@ -7,7 +7,8 @@ final class LocalStore {
     var fileURL: URL { directory.appendingPathComponent("configuration.json") }
     private var protectsUnreadableOriginal = false
 
-    func load() -> (Configuration, String?) {
+    /// 读盘告警以文案键返回，避免在 `AppState` 设定语言之前就把文本定死。
+    func load() -> (Configuration, AppNotice?) {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return (Configuration(), nil) }
         do { return (try Configuration.decode(readBounded(fileURL)), nil) }
         catch {
@@ -16,8 +17,8 @@ final class LocalStore {
             do { try FileManager.default.copyItem(at: fileURL, to: backup) }
             catch { protectsUnreadableOriginal = true }
             return (Configuration(), protectsUnreadableOriginal
-                    ? "Settings could not be read or backed up. Saving is disabled to protect the original file."
-                    : "Settings could not be read. The original was preserved in Application Support; defaults are in use.")
+                    ? .init(key: "Settings could not be read or backed up. Saving is disabled to protect the original file.", isError: true)
+                    : .init(key: "Settings could not be read. The original was preserved in Application Support; defaults are in use.", isError: true))
         }
     }
 

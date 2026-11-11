@@ -26,7 +26,7 @@ struct LiveWindow: Identifiable, @unchecked Sendable {
     let ordinal: Int
     let frame: CGRect
     var identity: WindowIdentity { .init(bundleID: app.bundleID, title: title, ordinal: ordinal) }
-    var displayTitle: String { title.isEmpty ? "Untitled window" : title }
+    var displayTitle: String { title.isEmpty ? Localization.t("Untitled window") : title }
 }
 
 struct WindowMove: @unchecked Sendable {
@@ -66,9 +66,9 @@ enum WindowGroupError: Error, LocalizedError {
     case unavailable, tooMany, targetMissing
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "The app’s window list could not be read. Nothing was moved. Try again when the app responds."
-        case .tooMany: return "This app has more than 128 windows. Nothing was moved; use a smaller selected group."
-        case .targetMissing: return "The target window closed or is no longer resizable. Open the picker again."
+        case .unavailable: return Localization.t("The app’s window list could not be read. Nothing was moved. Try again when the app responds.")
+        case .tooMany: return Localization.t("This app has more than 128 windows. Nothing was moved; use a smaller selected group.")
+        case .targetMissing: return Localization.t("The target window closed or is no longer resizable. Open the picker again.")
         }
     }
 }
@@ -234,7 +234,7 @@ final class WindowAccess: @unchecked Sendable {
             queue.async {
                 defer { self.clearActiveOperation(control) }
                 guard let moves = self.undoHistory.popLast() else {
-                    continuation.resume(returning: .init(succeeded: false, message: "Nothing to undo yet.", movedCount: 0)); return
+                    continuation.resume(returning: .init(succeeded: false, message: Localization.t("Nothing to undo yet."), movedCount: 0)); return
                 }
                 let report = self.perform(moves, recordUndo: false, control: control)
                 if !report.succeeded { self.undoHistory.append(moves) }
@@ -288,21 +288,21 @@ final class WindowAccess: @unchecked Sendable {
     }
 
     private func perform(_ moves: [WindowMove], recordUndo: Bool, control: WindowOperationControl) -> MoveReport {
-        guard Self.isTrusted else { return .init(succeeded: false, message: "Enable Accessibility access to arrange windows.", movedCount: 0) }
-        guard !moves.isEmpty else { return .init(succeeded: false, message: "Assign at least one window first.", movedCount: 0) }
+        guard Self.isTrusted else { return .init(succeeded: false, message: Localization.t("Enable Accessibility access to arrange windows."), movedCount: 0) }
+        guard !moves.isEmpty else { return .init(succeeded: false, message: Localization.t("Assign at least one window first."), movedCount: 0) }
         guard moves.count <= 128, Set(moves.map { $0.window.id }).count == moves.count else {
-            return .init(succeeded: false, message: "The arrangement contains too many or duplicate windows.", movedCount: 0)
+            return .init(succeeded: false, message: Localization.t("The arrangement contains too many or duplicate windows."), movedCount: 0)
         }
         var originals: [WindowMove] = []
         // Preflight the entire batch before changing anything.
         for move in moves {
-            if control.shouldStop { return .init(succeeded: false, message: "Arrangement stopped before moving any windows.", movedCount: 0) }
+            if control.shouldStop { return .init(succeeded: false, message: Localization.t("Arrangement stopped before moving any windows."), movedCount: 0) }
             guard !originals.contains(where: { $0.window.app.pid == move.window.app.pid && CFEqual($0.window.element, move.window.element) }) else {
-                return .init(succeeded: false, message: "The same live window was assigned twice. Refresh the window list; nothing was moved.", movedCount: 0)
+                return .init(succeeded: false, message: Localization.t("The same live window was assigned twice. Refresh the window list; nothing was moved."), movedCount: 0)
             }
             guard Self.isEligible(move.window.element), let original = Self.frame(move.window.element),
                   Self.valid(move.destination) else {
-                return .init(succeeded: false, message: "A window closed, became fullscreen, or cannot be resized. Refresh and try again.", movedCount: 0)
+                return .init(succeeded: false, message: Localization.t("A window closed, became fullscreen, or cannot be resized. Refresh and try again."), movedCount: 0)
             }
             originals.append(.init(window: move.window, destination: original))
         }
@@ -323,8 +323,10 @@ final class WindowAccess: @unchecked Sendable {
                 if pass == 1 {
                     let actual = Self.frame(move.window.element)
                     let failures = rollback(originals)
-                    let detail = failures == 0 ? "Previous positions restored." : "\(failures) window(s) could not be restored."
-                    return .init(succeeded: false, message: "\(move.window.app.name) kept changing the layout after resizing. \(detail)", movedCount: 0,
+                    let detail = failures == 0 ? Localization.t("Previous positions restored.")
+                        : Localization.tf("%ld window(s) could not be restored.", failures)
+                    let message = Localization.tf("%@ kept changing the layout after resizing. %@", move.window.app.name, detail)
+                    return .init(succeeded: false, message: message, movedCount: 0,
                                  failure: .init(windowID: move.window.id, requested: move.destination, actual: actual, constrainedMinimum: nil, rollbackFailures: failures))
                 }
                 let adjustment = Self.setFrame(move.destination, on: move.window.element, shouldStop: { control.shouldStop })
@@ -335,28 +337,33 @@ final class WindowAccess: @unchecked Sendable {
             undoHistory.append(originals)
             if undoHistory.count > 20 { undoHistory.removeFirst() }
         }
-        return .init(succeeded: true, message: "\(moves.count) window\(moves.count == 1 ? "" : "s") arranged. Unassigned cells stay empty.", movedCount: moves.count)
+        return .init(succeeded: true, message: moves.count == 1
+                     ? Localization.tf("%ld window arranged. Unassigned cells stay empty.", moves.count)
+                     : Localization.tf("%ld windows arranged. Unassigned cells stay empty.", moves.count), movedCount: moves.count)
     }
 
     private func failureReport(move: WindowMove, adjustment: FrameAdjustment, originals: [WindowMove], control: WindowOperationControl) -> MoveReport {
         let failures = rollback(originals, drainPending: control.shouldStop)
         let requested = "\(Int(move.destination.width.rounded())) × \(Int(move.destination.height.rounded()))"
-        let actual = adjustment.actual.map { "\(Int($0.width.rounded())) × \(Int($0.height.rounded()))" } ?? "unavailable"
+        let actual = adjustment.actual.map { "\(Int($0.width.rounded())) × \(Int($0.height.rounded()))" } ?? Localization.t("unavailable")
         let cause: String
         if control.isCancelled {
-            cause = "arrangement was cancelled."
+            cause = Localization.t("arrangement was cancelled.")
         } else if control.shouldStop {
-            cause = "arrangement exceeded its bounded response time."
+            cause = Localization.t("arrangement exceeded its bounded response time.")
         } else if adjustment.constrainedMinimum != nil {
-            cause = "kept the window at \(actual) pt instead of \(requested) pt. This portion is below the app’s observed size limit."
+            cause = Localization.tf("kept the window at %@ pt instead of %@ pt. This portion is below the app’s observed size limit.", actual, requested)
         } else if adjustment.unavailable {
-            cause = "stopped accepting window-control requests."
+            cause = Localization.t("stopped accepting window-control requests.")
         } else if let frame = adjustment.actual, FrameSettler.matchesSize(frame, move.destination) {
-            cause = "accepted the \(requested) pt size but did not move to (\(Int(move.destination.minX)), \(Int(move.destination.minY))). Actual position: (\(Int(frame.minX)), \(Int(frame.minY)))."
+            cause = Localization.tf("accepted the %@ pt size but did not move to (%ld, %ld). Actual position: (%ld, %ld).",
+                                    requested, Int(move.destination.minX), Int(move.destination.minY), Int(frame.minX), Int(frame.minY))
         } else {
-            cause = "did not settle at \(requested) pt (last size: \(actual))."
+            cause = Localization.tf("did not settle at %@ pt (last size: %@).", requested, actual)
         }
-        let detail = failures == 0 ? "Previous positions restored; no replacement layout was applied. Try a larger portion if the app requires it." : "\(failures) window(s) could not be restored; inspect them before retrying."
+        let detail = failures == 0
+            ? Localization.t("Previous positions restored; no replacement layout was applied. Try a larger portion if the app requires it.")
+            : Localization.tf("%ld window(s) could not be restored; inspect them before retrying.", failures)
         return .init(succeeded: false, message: "\(move.window.app.name) \(cause) \(detail)", movedCount: 0,
                      failure: .init(windowID: move.window.id, requested: move.destination, actual: adjustment.actual,
                                     constrainedMinimum: adjustment.constrainedMinimum, rollbackFailures: failures))

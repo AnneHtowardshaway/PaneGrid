@@ -17,12 +17,13 @@ final class HotKeyManager {
                 DispatchQueue.main.async { manager.onTrigger?() }
                 return noErr
             }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
-            guard result == noErr else { return "The global shortcut handler could not start (\(result))." }
+            guard result == noErr else { return Localization.tf("The global shortcut handler could not start (%ld).", Int(result)) }
         }
         let modifiers = UInt32(controlKey | (shortcut == .controlOptionSpace ? optionKey : shiftKey))
         let identifier = EventHotKeyID(signature: OSType(0x50475244), id: 1)
         let result = RegisterEventHotKey(UInt32(kVK_Space), modifiers, identifier, GetApplicationEventTarget(), 0, &hotKey)
-        return result == noErr ? nil : "\(shortcut.label) is unavailable (\(result)). Choose the other shortcut in Settings."
+        return result == noErr ? nil
+            : Localization.tf("%@ is unavailable (%ld). Choose the other shortcut in Settings.", shortcut.label, Int(result))
     }
 
     deinit {

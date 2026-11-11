@@ -128,12 +128,13 @@ struct GridCanvas: View {
             return .handled
         }
         .onChange(of: grid) { _, _ in selection = .init(column: 0, row: 0); hover = nil; dragStart = nil; onPreview?(nil) }
-        .accessibilityLabel("Window layout grid")
-        .accessibilityValue("Column \(selection.column + 1), row \(selection.row + 1), spans \(selection.columnSpan) columns and \(selection.rowSpan) rows")
-        .accessibilityHint("Arrow keys move the selection. Shift and arrows change its size. Return applies it.")
+        .accessibilityLabel(Localization.t("Window layout grid"))
+        .accessibilityValue(Localization.tf("Column %ld, row %ld, spans %ld columns and %ld rows",
+                                            selection.column + 1, selection.row + 1, selection.columnSpan, selection.rowSpan))
+        .accessibilityHint(Localization.t("Arrow keys move the selection. Shift and arrows change its size. Return applies it."))
         .accessibilityChildren {
             ForEach(0..<grid.count, id: \.self) { index in
-                Button("Column \(index % grid.columns + 1), row \(index / grid.columns + 1)") {
+                Button(Localization.tf("Column %ld, row %ld", index % grid.columns + 1, index / grid.columns + 1)) {
                     selection = .init(column: index % grid.columns, row: index / grid.columns)
                     onCommit?(selection)
                 }
@@ -154,10 +155,10 @@ struct GridDimensions: View {
 
     var body: some View {
         HStack(spacing: compact ? 10 : 18) {
-            dimension("Columns", value: state.settings.grid.columns) { state.setGrid(.init(columns: $0, rows: state.settings.grid.rows)) }
+            dimension(Localization.t("Columns"), value: state.settings.grid.columns) { state.setGrid(.init(columns: $0, rows: state.settings.grid.rows)) }
             Text("×").foregroundStyle(.tertiary)
-            dimension("Rows", value: state.settings.grid.rows) { state.setGrid(.init(columns: state.settings.grid.columns, rows: $0)) }
-            if !compact { Spacer(); Text("\(state.settings.grid.count) cells").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+            dimension(Localization.t("Rows"), value: state.settings.grid.rows) { state.setGrid(.init(columns: state.settings.grid.columns, rows: $0)) }
+            if !compact { Spacer(); Text(Localization.tf("%ld cells", state.settings.grid.count)).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
         }
     }
 
@@ -191,7 +192,7 @@ struct PresetStrip: View {
                         .foregroundStyle(state.settings.grid == grid ? PaneStyle.accent : .primary)
                         .background(state.settings.grid == grid ? PaneStyle.accent.opacity(0.15) : Color.primary.opacity(0.045), in: Capsule())
                 }.buttonStyle(.plain)
-                    .accessibilityLabel("\(grid.columns) columns, \(grid.rows) rows")
+                    .accessibilityLabel(Localization.tf("%ld columns, %ld rows", grid.columns, grid.rows))
                     .accessibilityIdentifier("preset.\(grid.columns)x\(grid.rows)")
             }
         }

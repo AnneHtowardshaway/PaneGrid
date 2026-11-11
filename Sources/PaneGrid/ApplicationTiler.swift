@@ -32,7 +32,10 @@ enum ApplicationTiler {
             }
             let report = await access.apply(moves)
             if report.succeeded {
-                return .init(report: .init(succeeded: true, message: "Tiled all \(windows.count) eligible \(target.app.name) windows using \(grid.label). Other apps were untouched.", movedCount: windows.count),
+                return .init(report: .init(succeeded: true,
+                                            message: Localization.tf("Tiled all %ld eligible %@ windows using %@. Other apps were untouched.",
+                                                                     windows.count, target.app.name, grid.label),
+                                            movedCount: windows.count),
                              usedGrid: grid, adapted: false)
             }
             // A preset is a command, not a hint. Never apply a different grid behind the user's back.
@@ -46,7 +49,7 @@ enum ApplicationTiler {
                 if candidate != partitions { suggestion = candidate }
             }
             return .init(report: .init(succeeded: false,
-                                      message: "\(grid.label) was not applied. \(report.message) Your chosen grid has not been changed.",
+                                      message: Localization.tf("%@ was not applied. %@ Your chosen grid has not been changed.", grid.label, report.message),
                                       movedCount: 0, failure: report.failure), usedGrid: grid, adapted: false, suggestedGrid: suggestion)
         } catch {
             return .init(report: .init(succeeded: false, message: error.localizedDescription, movedCount: 0), usedGrid: grid, adapted: false)

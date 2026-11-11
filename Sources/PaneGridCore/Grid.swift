@@ -78,11 +78,11 @@ public enum GridError: Error, LocalizedError, Equatable {
     case invalidRegion, invalidScreen, overlappingRegions, duplicateWindow, invalidConfiguration
     public var errorDescription: String? {
         switch self {
-        case .invalidRegion: return "A tile is outside the grid. Choose a new region."
-        case .invalidScreen: return "The display has no usable space for this grid."
-        case .overlappingRegions: return "Two assignments overlap. Clear one of them first."
-        case .duplicateWindow: return "A window can only be assigned once."
-        case .invalidConfiguration: return "This layout file is invalid or uses an unsupported version."
+        case .invalidRegion: return Localization.t("A tile is outside the grid. Choose a new region.")
+        case .invalidScreen: return Localization.t("The display has no usable space for this grid.")
+        case .overlappingRegions: return Localization.t("Two assignments overlap. Clear one of them first.")
+        case .duplicateWindow: return Localization.t("A window can only be assigned once.")
+        case .invalidConfiguration: return Localization.t("This layout file is invalid or uses an unsupported version.")
         }
     }
 }

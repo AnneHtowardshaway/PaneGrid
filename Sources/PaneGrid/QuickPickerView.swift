@@ -18,27 +18,27 @@ struct QuickPickerView: View {
                 }
                 Spacer()
                 Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
-                    .buttonStyle(.plain).accessibilityLabel("Close picker")
+                    .buttonStyle(.plain).accessibilityLabel(Localization.t("Close picker"))
             }
-            Picker("Display", selection: $state.displayID) {
+            Picker(Localization.t("Display"), selection: $state.displayID) {
                 ForEach(state.displays) { display in Text(display.name).tag(display.id) }
             }.controlSize(.small)
-            Toggle("Tile all windows of this app", isOn: $state.settings.tileAllAppWindows)
+            Toggle(Localization.t("Tile all windows of this app"), isOn: $state.settings.tileAllAppWindows)
                 .font(.system(size: 12, weight: .semibold)).toggleStyle(.switch).controlSize(.small)
                 .accessibilityIdentifier("picker.tile-all-app")
-                .help("Applies to \(window.app.name) only. Choose a preset to tile immediately; other apps stay unchanged.")
+                .help(Localization.tf("Applies to %@ only. Choose a preset to tile immediately; other apps stay unchanged.", window.app.name))
             PresetStrip(state: state, compact: true, onSelect: { grid in
                 if state.settings.tileAllAppWindows { state.tileApplication(window, requestedGrid: grid) }
             })
             if let feedback = state.appTileFeedback,
                feedback.request.target.app.pid == window.app.pid {
                 VStack(alignment: .leading, spacing: 7) {
-                    Label("\(feedback.request.grid.label) was not applied", systemImage: "exclamationmark.triangle")
+                    Label(Localization.tf("%@ was not applied", feedback.request.grid.label), systemImage: "exclamationmark.triangle")
                         .font(.caption.weight(.semibold)).foregroundStyle(.orange)
                     Text(feedback.message).font(.system(size: 10)).foregroundStyle(.secondary)
                         .lineLimit(4).fixedSize(horizontal: false, vertical: true).help(feedback.message)
                     if let grid = feedback.suggestedGrid {
-                        Button("Try \(grid.label) instead") { state.useSuggestedGrid(for: feedback.request.target) }
+                        Button(Localization.tf("Try %@ instead", grid.label)) { state.useSuggestedGrid(for: feedback.request.target) }
                             .controlSize(.small).accessibilityIdentifier("picker.accept-suggested-grid")
                     }
                 }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
@@ -50,34 +50,34 @@ struct QuickPickerView: View {
                        onCommit: { state.snap(window, to: $0) }, onPreview: preview)
                 .frame(height: 194).accessibilityIdentifier("picker.grid")
             HStack {
-                Text(state.settings.tileAllAppWindows ? "Preset: tile all · Drag: same size for all" : "Drag to span · Release to resize")
+                Text(state.settings.tileAllAppWindows ? Localization.t("Preset: tile all · Drag: same size for all") : Localization.t("Drag to span · Release to resize"))
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Text("\(region.columnSpan) × \(region.rowSpan)").font(.caption.monospacedDigit()).foregroundStyle(PaneStyle.accent)
             }
             HStack {
                 if state.settings.tileAllAppWindows {
-                    Button("Tile app windows") { state.tileApplication(window) }
+                    Button(Localization.t("Tile app windows")) { state.tileApplication(window) }
                         .buttonStyle(.borderedProminent).accessibilityIdentifier("picker.tile-app-now")
                 } else {
-                    Button("Fill") { state.snap(window, to: .init(column: 0, row: 0, columnSpan: state.settings.grid.columns, rowSpan: state.settings.grid.rows)) }
-                    Button("Center") { state.center(window) }
+                    Button(Localization.t("Fill")) { state.snap(window, to: .init(column: 0, row: 0, columnSpan: state.settings.grid.columns, rowSpan: state.settings.grid.rows)) }
+                    Button(Localization.t("Center")) { state.center(window) }
                 }
-                Button("Undo") { state.undo() }.disabled(state.undoDepth == 0)
+                Button(Localization.t("Undo")) { state.undo() }.disabled(state.undoDepth == 0)
                 Spacer()
-                Button("Workspace…") { close(); state.onShowWorkspace?() }
+                Button(Localization.t("Workspace…")) { close(); state.onShowWorkspace?() }
             }.controlSize(.small)
             Divider()
             if state.settings.tileAllAppWindows {
-                Toggle("Suggest a fitting grid if needed", isOn: $state.settings.autoFitAppWindows)
+                Toggle(Localization.t("Suggest a fitting grid if needed"), isOn: $state.settings.autoFitAppWindows)
                     .font(.caption).toggleStyle(.checkbox).accessibilityIdentifier("picker.auto-fit-app")
-                Text("\(window.app.name) only. Presets never change automatically.")
+                Text(Localization.tf("%@ only. Presets never change automatically.", window.app.name))
                     .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             } else {
-                Toggle("Reflow my selected group (\(state.selectedIDs.count))", isOn: $state.settings.reflowSelection)
+                Toggle(Localization.tf("Reflow my selected group (%ld)", state.selectedIDs.count), isOn: $state.settings.reflowSelection)
                     .font(.caption).toggleStyle(.checkbox)
             }
-            Text("Blank cells stay empty. Esc closes. Shift + arrows changes the span.")
+            Text(Localization.t("Blank cells stay empty. Esc closes. Shift + arrows changes the span."))
                 .font(.system(size: 10)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(18).frame(width: 380)

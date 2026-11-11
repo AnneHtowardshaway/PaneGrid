@@ -42,12 +42,12 @@ final class WindowOverlay {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
             window.isReleasedWhenClosed = false
         }
-        panel.title = "PaneGrid Picker"
+        panel.title = Localization.t("PaneGrid Picker")
         panel.level = .popUpMenu
         panel.hasShadow = true
         panel.becomesKeyOnlyIfNeeded = false
         panel.isFloatingPanel = true
-        previewPanel.title = "PaneGrid Preview"
+        previewPanel.title = Localization.t("PaneGrid Preview")
         previewPanel.level = .floating
         previewPanel.ignoresMouseEvents = true
         previewPanel.hasShadow = false
@@ -89,7 +89,7 @@ final class WindowOverlay {
             },
             onUnavailable: { [weak self] in
                 guard let self else { return }
-                let notice = AppNotice(text: "Green-button press-and-hold is unavailable because the mouse event tap could not be enabled. Hover (when enabled) and the picker shortcut still work.", isError: true)
+                let notice = AppNotice(key: "Green-button press-and-hold is unavailable because the mouse event tap could not be enabled. Hover (when enabled) and the picker shortcut still work.", isError: true)
                 self.state.notice = notice
                 self.showMessage(notice)
             })
@@ -141,7 +141,7 @@ final class WindowOverlay {
 
     func showFocused() {
         guard state.isTrusted, !state.isBusy, !state.isPaused else {
-            state.notice = .init(text: "Enable Accessibility and resume PaneGrid before opening the picker.", isError: true)
+            state.notice = .init(key: "Enable Accessibility and resume PaneGrid before opening the picker.", isError: true)
             state.onShowWorkspace?(); return
         }
         pressMonitor?.cancelPending()
@@ -152,7 +152,7 @@ final class WindowOverlay {
         let front = NSWorkspace.shared.frontmostApplication
         let candidate = state.appCandidates.first { $0.pid == front?.processIdentifier } ?? state.lastExternalApp
         guard let candidate, !state.settings.excludedBundleIDs.contains(candidate.bundleID) else {
-            showMessage(.init(text: "Focus a resizable application window first.", isError: true)); return
+            showMessage(.init(key: "Focus a resizable application window first.", isError: true)); return
         }
         focusGeneration += 1
         let generation = focusGeneration
@@ -160,7 +160,7 @@ final class WindowOverlay {
             let result = await state.access.focusedWindow(in: candidate)
             guard generation == focusGeneration else { return }
             guard let window = result, !state.isPaused else {
-                showMessage(.init(text: "This window cannot be resized. Try a normal, non-fullscreen window.", isError: true)); return
+                showMessage(.init(key: "This window cannot be resized. Try a normal, non-fullscreen window.", isError: true)); return
             }
             let anchor = CGRect(x: window.frame.midX - 8, y: window.frame.minY + 28, width: 16, height: 16)
             show(window: window, anchorAX: anchor, fromHover: false)

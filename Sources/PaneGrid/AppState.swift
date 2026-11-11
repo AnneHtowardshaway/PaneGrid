@@ -15,14 +15,40 @@ struct DisplayInfo: Identifiable {
 
 enum WorkspaceSection: String, CaseIterable {
     case workspace = "Workspace", layouts = "Saved layouts", settings = "Settings"
+    /// 侧边栏标题。rawValue 同时充当文案层的英文键，不参与持久化。
+    var title: String { Localization.t(rawValue) }
     var symbol: String {
         switch self { case .workspace: return "rectangle.split.3x3"; case .layouts: return "square.stack.3d.up"; case .settings: return "slider.horizontal.3" }
     }
 }
 
+/// 一条状态提示。以文案键构造的提示会在切换语言后重新渲染；由运行时结果拼装的文本按原样保留。
 struct AppNotice {
     var text: String
     var isError: Bool = false
+    private var key: String?
+    private var arguments: [CVarArg] = []
+
+    init(text: String, isError: Bool = false) {
+        self.text = text
+        self.isError = isError
+    }
+
+    /// 使用文案层键构造。所有参数按 `String(format:)` 规则解释，整数请用 `%ld`。
+    init(key: String, _ arguments: CVarArg..., isError: Bool = false) {
+        self.key = key
+        self.arguments = arguments
+        self.isError = isError
+        text = Localization.tf(key, arguments)
+    }
+
+    /// 语言切换后调用；没有文案键的提示保持原文。
+    func relocalized() -> AppNotice {
+        guard let key else { return self }
+        var value = self
+        value.text = Localization.tf(key, arguments)
+        return value
+    }
 }
 
 struct AppTileRequest {
@@ -48,6 +74,9 @@ final class AppState: ObservableObject {
     private let ephemeral: Bool
     @Published var settings: AppSettings {
         didSet {
+            // 语言属于界面设置：先同步文案层，再触发重绘，切换后无需重启即可生效。
+            Localization.language = settings.language
+            if settings.language != oldValue.language { notice = notice.relocalized() }
             appTileFeedback = nil
             if settings.grid != oldValue.grid { assignments = [:]; region = .init(column: 0, row: 0) }
             scheduleSave()
@@ -65,7 +94,7 @@ final class AppState: ObservableObject {
     @Published var displayID = "" { didSet { if displayID != oldValue { appTileFeedback = nil } } }
     @Published var appTileFeedback: AppTileFeedback?
     @Published var section: WorkspaceSection = .workspace
-    @Published var notice = AppNotice(text: "Select windows, draw a tile, and make it yours.")
+    @Published var notice = AppNotice(key: "Select windows, draw a tile, and make it yours.")
     @Published var isTrusted = WindowAccess.isTrusted
     @Published var isBusy = false
     @Published var cancelRequested = false
@@ -88,11 +117,15 @@ final class AppState: ObservableObject {
 
     init(ephemeral: Bool = false) {
         self.ephemeral = ephemeral
-        let (configuration, warning): (Configuration, String?) = ephemeral ? (Configuration(), nil) : store.load()
+        let (configuration, warning): (Configuration, AppNotice?) = ephemeral ? (Configuration(), nil) : store.load()
+        // 必须先于任何提示渲染设定语言，否则首条提示会用错误的语言显示。
+        Localization.language = configuration.settings.language
         settings = configuration.settings
         layouts = configuration.layouts
         refreshDisplays()
-        if let warning { notice = .init(text: warning, isError: true) }
+        if let warning { notice = warning }
+        // 属性默认值在 init 体之前求值，此时语言还是 .system；这里按最终语言重新渲染一次。
+        notice = notice.relocalized()
     }
 
     var display: DisplayInfo? { displays.first { $0.id == displayID } ?? displays.first }
@@ -148,7 +181,7 @@ final class AppState: ObservableObject {
         let trusted = WindowAccess.isTrusted
         if trusted != isTrusted {
             isTrusted = trusted
-            if trusted { notice = .init(text: "Window control is ready. Hover a green button or press \(settings.shortcut.label)."); refresh() }
+            if trusted { notice = .init(key: "Window control is ready. Hover a green button or press %@.", settings.shortcut.label); refresh() }
             else {
                 scanGeneration += 1
                 pendingAppTile = nil
@@ -175,11 +208,11 @@ final class AppState: ObservableObject {
     func assign(_ window: LiveWindow) {
         guard region.isValid(in: settings.grid) else { return }
         guard !assignments.contains(where: { $0.key != window.id && $0.value.intersects(region) }) else {
-            notice = .init(text: "That region is occupied. Clear the region first, or choose an empty one.", isError: true); return
+            notice = .init(key: "That region is occupied. Clear the region first, or choose an empty one.", isError: true); return
         }
         assignments[window.id] = region
         selectedIDs.insert(window.id)
-        notice = .init(text: "\(window.app.name) assigned to \(region.columnSpan) × \(region.rowSpan) cells. Apply when ready.")
+        notice = .init(key: "%@ assigned to %ld × %ld cells. Apply when ready.", window.app.name, region.columnSpan, region.rowSpan)
     }
 
     func clearRegion() { assignments = assignments.filter { !$0.value.intersects(region) } }
@@ -190,8 +223,8 @@ final class AppState: ObservableObject {
             let reserved = assignments.map { Placement(windowID: $0.key, region: $0.value) }
             let plan = try LayoutPlanner.pack(windowIDs: selected, grid: settings.grid, reserved: reserved)
             assignments = Dictionary(uniqueKeysWithValues: plan.placements.map { ($0.windowID, $0.region) })
-            notice = .init(text: plan.overflow.isEmpty ? "\(assignments.count) windows placed in the draft. Empty cells stay empty."
-                           : "\(plan.overflow.count) selected windows do not fit and will remain unchanged.", isError: !plan.overflow.isEmpty)
+            notice = plan.overflow.isEmpty ? .init(key: "%ld windows placed in the draft. Empty cells stay empty.", assignments.count)
+                           : .init(key: "%ld selected windows do not fit and will remain unchanged.", plan.overflow.count, isError: true)
         } catch { show(error) }
     }
 
@@ -208,7 +241,7 @@ final class AppState: ObservableObject {
             let plan = try LayoutPlanner.pack(windowIDs: windows.filter { selectedIDs.contains($0.id) }.map(\.id), grid: settings.grid,
                                               reserved: assignments.map { Placement(windowID: $0.key, region: $0.value) })
             guard plan.overflow.isEmpty else {
-                notice = .init(text: "\(plan.overflow.count) selected windows do not fit. Choose a grid with more cells; nothing was moved.", isError: true)
+                notice = .init(key: "%ld selected windows do not fit. Choose a grid with more cells; nothing was moved.", plan.overflow.count, isError: true)
                 return
             }
             let entries = plan.placements
@@ -244,7 +277,7 @@ final class AppState: ObservableObject {
     func tileApplication(_ window: LiveWindow, requestedGrid: GridSize? = nil, columnSpan: Int = 1, rowSpan: Int = 1) {
         guard isTrusted, !isPaused, let display,
               appCandidates.contains(where: { $0.pid == window.app.pid && $0.bundleID == window.app.bundleID }) else {
-            notice = .init(text: "The target app is no longer available for tiling. Open its picker again.", isError: true)
+            notice = .init(key: "The target app is no longer available for tiling. Open its picker again.", isError: true)
             onResult?(notice)
             return
         }
@@ -254,7 +287,7 @@ final class AppState: ObservableObject {
                                      surface: surface, displayID: displayID, offerAlternatives: settings.autoFitAppWindows)
         if isBusy {
             guard activeAppTile != nil else {
-                notice = .init(text: "Wait for the current arrangement to finish before tiling an app.", isError: true)
+                notice = .init(key: "Wait for the current arrangement to finish before tiling an app.", isError: true)
                 onResult?(notice)
                 return
             }
@@ -262,7 +295,7 @@ final class AppState: ObservableObject {
             // An old completion must never resize on top of a newer transaction or overwrite its preset.
             pendingAppTile = request
             settings.grid = grid
-            notice = .init(text: "Queued \(grid.label). It will run as soon as the current arrangement finishes.")
+            notice = .init(key: "Queued %@. It will run as soon as the current arrangement finishes.", grid.label)
             return
         }
         settings.grid = grid
@@ -275,7 +308,7 @@ final class AppState: ObservableObject {
               displays.contains(where: { $0.id == request.displayID && $0.visibleFrame == request.surface.visibleFrame && $0.scale == request.surface.scale }) else {
             activeAppTile = nil
             isBusy = false
-            notice = .init(text: "The target app or display changed before the queued command could run. Nothing new was moved.", isError: true)
+            notice = .init(key: "The target app or display changed before the queued command could run. Nothing new was moved.", isError: true)
             onResult?(notice)
             return
         }
@@ -288,7 +321,7 @@ final class AppState: ObservableObject {
         cancelRequested = false
         isBusy = true
         onPreferencesChanged?()
-        notice = .init(text: "Tiling \(request.target.app.name) using \(request.grid.label)…")
+        notice = .init(key: "Tiling %@ using %@…", request.target.app.name, request.grid.label)
         Task {
             let result = await ApplicationTiler.tile(target: request.target, access: access, grid: request.grid,
                                                      columnSpan: request.columnSpan, rowSpan: request.rowSpan,
@@ -335,7 +368,7 @@ final class AppState: ObservableObject {
             let destination = CGRect(x: area.midX - current.width / 2, y: area.midY - current.height / 2,
                                      width: current.width, height: current.height)
             guard area.contains(destination) else {
-                isBusy = false; notice = .init(text: "The window is larger than this display. Use Fill first.", isError: true); return
+                isBusy = false; notice = .init(key: "The window is larger than this display. Use Fill first.", isError: true); return
             }
             let report = await access.apply([.init(window: window, destination: destination)])
             finish(report)
@@ -351,7 +384,7 @@ final class AppState: ObservableObject {
         onDismissPicker?()
         isBusy = true
         onPreferencesChanged?()
-        notice = .init(text: "Arranging \(moves.count) windows…")
+        notice = .init(key: "Arranging %ld windows…", moves.count)
         Task { let report = await access.apply(moves); finish(report, suffix: suffix) }
     }
 
@@ -359,7 +392,7 @@ final class AppState: ObservableObject {
         guard isBusy, !cancelRequested else { return }
         pendingAppTile = nil
         cancelRequested = true
-        notice = .init(text: "Stopping new moves and restoring changed windows…")
+        notice = .init(key: "Stopping new moves and restoring changed windows…")
         access.cancelCurrentOperation()
         // Covers cancellation immediately after a command was queued but before its AX token exists.
         Task {
@@ -395,7 +428,7 @@ final class AppState: ObservableObject {
             cancelRequested = false
             onPreferencesChanged?()
             if report.succeeded { undoDepth = max(0, undoDepth - 1) }
-            notice = .init(text: report.succeeded ? "Previous window positions restored." : report.message, isError: !report.succeeded)
+            notice = report.succeeded ? .init(key: "Previous window positions restored.") : .init(text: report.message, isError: true)
             onResult?(notice)
             refresh()
         }
@@ -404,7 +437,7 @@ final class AppState: ObservableObject {
     func saveLayout(named name: String) {
         let name = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
         guard !name.isEmpty, layouts.count < 100 else {
-            notice = .init(text: "Give the layout a name (up to 100 saved layouts).", isError: true); return
+            notice = .init(key: "Give the layout a name (up to 100 saved layouts).", isError: true); return
         }
         let slots = windows.compactMap { window -> SavedSlot? in
             guard let region = assignments[window.id],
@@ -415,7 +448,9 @@ final class AppState: ObservableObject {
         do {
             try layout.validate(); layouts.append(layout)
             let skipped = assignments.count - slots.count
-            notice = .init(text: "Saved “\(name)”. Missing windows stay blank.\(skipped > 0 ? " \(skipped) ambiguous window(s) were omitted; give their documents unique titles to save them." : "")")
+            notice = skipped > 0
+                ? .init(key: "Saved “%@”. Missing windows stay blank. %ld ambiguous window(s) were omitted; give their documents unique titles to save them.", name, skipped)
+                : .init(key: "Saved “%@”. Missing windows stay blank.", name)
         }
         catch { show(error) }
     }
@@ -440,7 +475,7 @@ final class AppState: ObservableObject {
             selectedIDs = used
             isScanning = false
             section = .workspace
-            notice = .init(text: "Loaded “\(layout.name)”: \(used.count)/\(layout.slots.count) windows matched. Missing slots stay blank.")
+            notice = .init(key: "Loaded “%@”: %ld/%ld windows matched. Missing slots stay blank.", layout.name, used.count, layout.slots.count)
             if applyImmediately { applyDraft() }
         }
     }
@@ -451,7 +486,7 @@ final class AppState: ObservableObject {
             else { try SMAppService.mainApp.unregister() }
             loginEnabled = SMAppService.mainApp.status == .enabled
             if SMAppService.mainApp.status == .requiresApproval {
-                notice = .init(text: "Approve PaneGrid in System Settings → General → Login Items.", isError: true)
+                notice = .init(key: "Approve PaneGrid in System Settings → General → Login Items.", isError: true)
                 SMAppService.openSystemSettingsLoginItems()
             }
         } catch { loginEnabled = SMAppService.mainApp.status == .enabled; show(error) }
@@ -461,9 +496,9 @@ final class AppState: ObservableObject {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "PaneGrid-layouts.json"
-        panel.message = "Saved layouts contain application identifiers and window titles. Review before sharing."
+        panel.message = Localization.t("Saved layouts contain application identifiers and window titles. Review before sharing.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try configuration.encoded().write(to: url, options: .atomic); notice = .init(text: "Settings and layouts exported.") }
+        do { try configuration.encoded().write(to: url, options: .atomic); notice = .init(key: "Settings and layouts exported.") }
         catch { show(error) }
     }
 
@@ -471,7 +506,7 @@ final class AppState: ObservableObject {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
-        panel.message = "Import layouts without replacing existing settings or layouts. Up to 100 layouts total."
+        panel.message = Localization.t("Import layouts without replacing existing settings or layouts. Up to 100 layouts total.")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let imported = try Configuration.decode(store.readBounded(url))
@@ -479,14 +514,14 @@ final class AppState: ObservableObject {
             let additions = imported.layouts.filter { !existing.contains($0.id) }
             guard layouts.count + additions.count <= 100 else { throw GridError.invalidConfiguration }
             layouts.append(contentsOf: additions)
-            notice = .init(text: "Imported \(additions.count) new layouts. Your current settings were kept.")
+            notice = .init(key: "Imported %ld new layouts. Your current settings were kept.", additions.count)
         } catch { show(error) }
     }
 
     func openPracticeWindows() {
         guard let url = Bundle.main.resourceURL?.appendingPathComponent("PaneGrid Practice.app"),
               FileManager.default.fileExists(atPath: url.path) else {
-            notice = .init(text: "Build the app bundle to include the practice windows.", isError: true); return
+            notice = .init(key: "Build the app bundle to include the practice windows.", isError: true); return
         }
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { [weak self] _, error in
             Task { @MainActor in
@@ -515,7 +550,7 @@ final class AppState: ObservableObject {
         guard !ephemeral else { return }
         saveWork?.cancel()
         do { try store.save(configuration) }
-        catch { notice = .init(text: "Settings could not be saved: \(error.localizedDescription)", isError: true) }
+        catch { notice = .init(key: "Settings could not be saved: %@", error.localizedDescription, isError: true) }
     }
 
     func show(_ error: Error) {
